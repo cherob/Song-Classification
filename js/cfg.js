@@ -16,8 +16,8 @@ function getID(config) {
 		let key_length = key.toString().length;
 		let value_length = value.toString().length;
 
-		
-		id += (value / key_length) * value_length;
+
+		id += (value * value) / (value_length * key_length);
 	});
 	id = `${Math.round(id)}${config.categories}`;
 	return id;
@@ -57,45 +57,48 @@ function getSamplesFromMillis(ms, rate) {
 class Config {
 	constructor() {
 		// Paths
-		this.audio_path = join("audio", "refactored");
-
-		// Files
-		this.audio_startpoint = 10; // (int)
-		this.audio_length = 120; // (int)
-		this.validation_data_mult = 1; // (int)
-
-		// Model	
-		this.nfft = 512; // lenght of single cepstral
-		this.nfilt = 26; // number of filters (summary of a small frequency range) per cepstral
-		this.nsize = 25 // (ms) window size of actually cepstal
-		this.nstep = 10 // (ms) step size for cepstal overlap
-		this.nfeat = 13; // number of amount of cepstral 
-		this.lowfreq = 20; // low frequency cutoff
-		this.highfreq = 10000; // high frequency cutoff 
-		this.frame_rate = 16000; // data per second
-
-		//Files
-		this.samples_per_file = 4; // amount of parts to look at (per file)
-		this.sample_length = 2; // length of single sample part in second
-		this.files_per_class = false // self explaining	
-
-		// Edit
-		this.nstep = getSamplesFromMillis(this.nstep, this.frame_rate);
-		this.nsize = getSamplesFromMillis(this.nsize, this.frame_rate);
-		// this.nfeat = 130 * this.sample_length; // number of amount of cepstral
+		this.audio_path = join("audio");
 
 		// Options
 		this.use_checkpoints = true; // (bool)
 
+		// Files
+		this.audio_startpoint = 10; // (int)
+		this.audio_length = 120; // (int)
+
+		// Model
+		this.pre_emphasis = 0.97 // 0.97 0.95 | (%)
+		this.nsize = 25 // 25 | (ms) window size of actually cepstal
+		this.nstep = 10 // 10  | (ms) step size for cepstal overlap
+		this.nfft = 512; // 512 | lenght of single cepstral
+		this.nfilt = 40; // 26 | number of filters (summary of a small frequency range) per cepstral
+		this.nfeat = false; // 13 | number of amount of cepstral 
+		this.frame_rate = 16000; // data per second
+
+		this.modes = ['conv', 'time']
+		this.mode = 1 // 0: conv; 1: time
+
+		//Files
+		this.samples_per_file = 5; // amount of parts to look at (per file)
+		this.sample_length = 1.5; // length of single sample part in second
+		this.files_per_class = 1; // self explaining
+		this.validation_len = 1 //  validation files per categories
+
+		// Edit
+		this.step = Math.pow(2, Math.round(Math.log(this.frame_rate * this.sample_length) / Math.log(2))); // get amout of data for given sample length
+		this.nstep = getSamplesFromMillis(this.nstep, this.frame_rate);
+		this.nsize = getSamplesFromMillis(this.nsize, this.frame_rate);
+		// number of amount of cepstral
+		if (!this.nfeat)
+			this.nfeat = Math.round(this.step / this.nstep);
+
 		// Training
+		this.learning_rate = 0.001;
 		this.shuffle = false // (bool)
 		this.shuffle_fit = true // (bool)
 		this.epochs = 5; // (int)
-		this.batch_size = 256; // (int)
+		this.batch_size = 1024; // (int)
 		this.calls = false; // (bool, int)
-
-		// Global
-		this.step = this.frame_rate * this.sample_length; // get amout of data for given sample length
 
 		// Range
 		this.min = Number.MAX_VALUE;
@@ -108,6 +111,10 @@ class Config {
 		this.files_per_class = getFilesPerClass(this);
 		this.files_len = this.categories * this.files_per_class * this.samples_per_file;
 		this.files_len = Math.round(this.files_len);
+		this.validation_len = this.validation_len * this.categories;
+		if (this.validation_len > this.files_len)
+			this.validation_len = this.files_len / this.samples_per_file;
+
 
 		// this.model_audio_date_path = join(`data`, `model` + this.id + `.csv`);
 		// this.predictions_date_path = join(`data`, `predictions` + this.id + `.csv`);
@@ -120,10 +127,11 @@ class Config {
 	calculate() {
 		console.log(` ${this.categories} loaded categories`);
 		console.log(`   with  ${this.files_per_class} files each,`);
-		console.log(`   every file is ${this.audio_length} seconds long,`);
+		console.log(`   every file is ${this.sample_length} seconds long,`);
 		console.log(`   divided into ${this.samples_per_file} samples`);
+		console.log(`   with (${this.nfilt}x${this.nfeat}) (filters, ccepstral)`);
 		console.log(` -> results in ${this.files_len} data records`);
-		console.log(`    ${this.data_path}`);
+		console.log(`    ID : ${this.id} MODE: ${this.modes[this.mode]}`);
 	}
 }
 

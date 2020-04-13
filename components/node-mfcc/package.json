@@ -1,0 +1,41 @@
+{
+  "name": "mfcc",
+  "version": "0.0.3",
+  "description": "Node.js implementation of the MFCC audio speech analysis algorithm.",
+  "license": "MIT",
+  "homepage": "https://github.com/vail-systems/node-mfcc",
+  "repository": "vail-systems/node-mfcc",
+  "contributors": [
+    "Joshua Jung <joshua.p.jung@gmail.com> (http://www.joshjung.com)",
+    "Ben Bryan <bbryan@vailsys.com>"
+  ],
+  "engines": {
+    "node": ">=0.12.0"
+  },
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "mfcc.js",
+    "src",
+    "test",
+    "data"
+  ],
+  "keywords": [
+    "mfcc",
+    "mel",
+    "scale",
+    "cepstrum",
+    "coefficients",
+    "frequency",
+    "fft",
+    "audio",
+    "speech"
+  ],
+  "dependencies": {
+    "commander": "^2.8.1",
+    "dct": "^0.0.3",
+    "fft-js": "0.0.9",
+    "signal-windows": "^0.0.1",
+    "wav": "^1.0.0"
+  }
+}

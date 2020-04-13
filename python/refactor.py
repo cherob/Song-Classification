@@ -54,9 +54,6 @@ for file in tqdm(audio_files):
 
         newPath = os.path.join(newFolder, genre, name)
 
-        data.append([name, genre])
-        # print(newPath, genre)
-
         newAudio = AudioSegment.from_wav(file)
         newAudio.set_frame_rate(config.frame_rate)
         newAudio = newAudio.set_channels(1)
@@ -68,9 +65,6 @@ for file in tqdm(audio_files):
         if not os.path.exists(dirPath):
             os.makedirs(dirPath)
 
-        newAudio.export(newPath, format="wav")
+        newAudio.export(newPath.replace('.mp3', '.wav'), format="wav")
 
 print('FINISH!! {} FILES'.format(i))
-
-df = pd.DataFrame(data=data, columns=['fname', 'label'])
-df.to_csv(config.refactored_audio_date_path, index=False)
