@@ -12,25 +12,29 @@ class Config {
 
 		// Files
 		this.audio_startpoint = 10; // (int)
-		this.audio_length = 120; // (int)
 
 		// Model
-		this.pre_emphasis = 0.97 // 0.97 0.95 | (%)
-		this.nfft = 512; // 512 | lenght of single cepstral
-		this.frame_size = 0.025 // 25 | (ms) window size of actually cepstal
-		this.frame_stride = 0.01 // 10  | (ms) step size for cepstal overlap
+		this.pre_emphasis = 0.97; // 0.97 0.95 | (%)
+		this.nfft = 2048; // 512 | lenght of single cepstral
 		this.nfilt = 26; // 26 | number of filters (summary of a small frequency range) per cepstral
-		this.num_ceps = 13; // 13 | number of amount of cepstral 
-		this.frame_rate = 8000; // data per second
-		this.cep_lifter = 22;
+		this.nstep = 512;
 
-		this.modes = ['conv', 'time']
-		this.mode = 1 // 0: conv; 1: time
+		this.fsize = 512;
+		this.fstep = 448;
+
+		this.num_ceps = 13; // 13 | number of amount of cepstral top to down
+		this.frame_rate = 16000; // data per second
+		this.cep_lifter = 1;
+
+		this.modes = ['conv', 'time', 'new'];
+		this.mode = 0; // 0: conv; 1: time
+		this.capsuled = true;
 
 		//Files
-		this.samples_per_file = 3; // amount of parts to look at (per file)
-		this.sample_length = 3.5; // length of single sample part in second
+		this.samples_per_file = 16; // amount of parts to look at (per file)
+		this.sample_length = 0.5; // length of single sample part in second
 		this.files_per_class = false; // self explaining
+		this.val_files_per_class = 64; // self explaining
 
 		// Edit
 		this.step = Math.pow(2, Math.round(Math.log(this.frame_rate * this.sample_length) / Math.log(2))); // get amout of data for given sample length
@@ -40,25 +44,28 @@ class Config {
 		this.num_frames = Math.round(this.step / this.nstep);
 
 		// Training
-		this.learning_rate = 0.01;
+		this.learning_rate = 0.0001;
 		this.shuffle = true // (bool)
 		this.shuffle_fit = true // (bool)
 		this.epochs = 5; // (int)
-		this.batch_size = 512; // (int)
-		this.calls = false; // (bool, int)
+		this.calls = 20;
+		this.batch_size = 128 * 2; // (int)
 
 
 		// Dependencies
 		this.categories = fs.readdirSync(this.audio_path).length;
 		this.id = getIDv2(this);
 		this.files = getFiles(this);
+
 		this.files_per_class = getFilesPerClass(this);
+
 		this.files_len = this.categories * this.files_per_class * this.samples_per_file;
 		this.files_len = Math.round(this.files_len);
-		this.validation_len = this.categories;
+		this.validation_len = Math.min(this.categories * this.val_files_per_class, this.files_len);
 
 		this.model_path = `file://./models/${this.id}/`;
 		this.data_path = join(`data`, this.id + `.json`);
+		this.history_path = join(`data`, this.id + `-history.json`);
 		this.chart_acc_path = join("images", "acc", this.id + `.png`);
 		this.chart_loss_path = join("images", "loss", this.id + `.png`);
 	}
@@ -67,7 +74,8 @@ class Config {
 
 function getIDv2(config) {
 	let id = 1;
-	let ignored = ["use_checkpoints", "use_checkpoints_model", "modes", "path", "learning_rate", "shuffle", "shuffle_fit", "epochs", "batch_size", "calls"]
+
+	let ignored = ["use_checkpoints", "use_checkpoints_model", "modes", "path", "learning_rate", "shuffle", "shuffle_fit", "epochs", "batch_size", "calls", "val_files_per_class", "history_path"];
 	Object.keys(config).forEach(key => {
 		if (ignored.includes(key)) return;
 		let value = config[key];

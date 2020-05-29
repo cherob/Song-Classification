@@ -21,36 +21,20 @@ var rgbToHex = function (rgb) {
 };
 
 var percentColors = [{
-        pct: 0.0,
-        color: {
-            r: 0x00,
-            g: 0x00,
-            b: 0xFF
-        }
-    }, {
-        pct: 0.28,
-        color: {
-            r: 0x40,
-            g: 0x00,
-            b: 0xC7
-        }
-    }, {
-        pct: 0.72,
-        color: {
-            r: 0xC7,
-            g: 0x00,
-            b: 0x40
-        }
-    },
-    {
-        pct: 1.0,
-        color: {
-            r: 0xFF,
-            g: 0x00,
-            b: 0x00
-        }
+    pct: 0,
+    color: {
+        r: 0x00,
+        g: 0x00,
+        b: 0xFF
     }
-];
+}, {
+    pct: 1,
+    color: {
+        r: 0xFF,
+        g: 0x00,
+        b: 0x00
+    }
+}, ];
 
 var getColorForPercentage = function (pct) {
     for (var i = 1; i < percentColors.length - 1; i++) {
@@ -118,8 +102,7 @@ function saveImage(name, imageData) {
 
 
     image.scale(30, Jimp.RESIZE_NEAREST_NEIGHBOR)
-
-    let size = [image.getWidth(), (image.getHeight())];
+    let size = [Math.round(image.getWidth() * 0.1), (image.getHeight())];
     image.resize(...size)
 
     let info_size = image.getHeight() * 0.1;

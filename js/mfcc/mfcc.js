@@ -7,15 +7,33 @@ const dct = require('dct');
 const ft = require('fourier-transform');
 
 class MFCC {
-    constructor(pre_emphasis = 0.97, frame_size = 0.025, frame_stride = 0.01, nfft = 512, nfilt = 40, num_ceps = 12, sample_rate = 16000, cep_lifter = 22) {
-        this.pre_emphasis = pre_emphasis;
-        this.frame_size = frame_size;
-        this.frame_stride = frame_stride;
-        this.nfft = nfft;
-        this.nfilt = nfilt;
-        this.num_ceps = num_ceps;
-        this.sample_rate = sample_rate;
-        this.cep_lifter = cep_lifter;
+    constructor(args = {
+        frame_rate,
+
+        nfft,
+        nstep,
+        nfilt,
+
+        fsize,
+        fstep,
+
+        num_ceps,
+
+        pre_emphasis,
+        cep_lifter,
+    }) {
+        this.sample_rate = args.frame_rate;
+
+        this.nfft = args.nfft;
+        this.nstep = args.nstep;
+        this.nfilt = args.nfilt;
+
+        this.fsize = args.fsize;
+        this.fstep = args.fstep;
+        this.num_ceps = args.num_ceps;
+
+        this.pre_emphasis = args.pre_emphasis;
+        this.cep_lifter = args.cep_lifter;
     }
 
     /**
@@ -46,7 +64,7 @@ class MFCC {
          * 
          * Typical frame sizes in speech processing range from 20 ms to 40 ms with 50% (+/-10%) overlap between 
          * consecutive frames. Popular settings are 25 ms for the frame size, 
-         *  frame_size = 0.025 and a 10 ms stride (15 ms overlap), 
+         *  fstep = 0.025 and a 10 ms stride (15 ms overlap), 
          *  frame_stride = 0.01.
          */
 
@@ -100,6 +118,7 @@ class MFCC {
          * As previously mentioned, to balance the spectrum and improve the Signal-to-Noise (SNR),
          * we can simply subtract the mean of each coefficient from all frames.
          */
+        // this.mfccs = this.mfccs.map(mfcc => mfcc.map(value => -value))
 
         this.meanNormalization();
 
@@ -108,14 +127,13 @@ class MFCC {
          *  lowest value => 0.00
          *  highest value => 1.00
          */
-        this.mfccs = this.mfccs.map(mfcc => mfcc.map(value => -value))
 
 
 
-        this.mfccs = T(this.mfccs)
+        // this.mfccs = T(this.mfccs)
         // this.mfccs = this.mfccs.map((mfcc) => mfcc.reverse())
 
-        return this.return_value || this.mfccs;
+        return this.mfccs;
     }
 
     preEmphasis() {
@@ -135,27 +153,34 @@ class MFCC {
 
     framing() {
         // Convert from seconds to samples
-        let frame_length = this.frame_size * this.sample_rate
-        let frame_step = this.frame_stride * this.sample_rate
+        // let fsize = this.fstep * this.sample_rate
+        // let fstep = this.frame_stride * this.sample_rate
+
+        let fsize = this.fsize;
+        let fstep = this.fstep;
+
 
         let signal_length = this.emphasized_signal.length
-        frame_length = Math.round(frame_length)
-        frame_step = Math.round(frame_step)
+        fsize = Math.round(fsize)
+        fstep = Math.round(fstep)
 
         // Make sure that we have at least 1 frame
-        let num_frames = mjs.ceil(Math.abs(signal_length - frame_length) / frame_step)
+        let num_frames = mjs.ceil(Math.abs(signal_length - fsize) / fstep)
 
-        let pad_signal_length = num_frames * frame_step + frame_length
+        let pad_signal_length = num_frames * fstep + fsize
         let z = mjs.zeros(pad_signal_length - signal_length);
         let pad_signal = this.emphasized_signal.concat(z)
-        let cols = numpy.arange(0, num_frames * frame_step, frame_step).tolist();
+        let cols = numpy.arange(0, num_frames * fstep, fstep).tolist();
 
         this.frames = cols.map((rows) => {
-            let frame_length_empty = Math.pow(2, Math.round(Math.log(frame_length) / Math.log(2))) - frame_length;
-            rows = pad_signal.slice(rows, rows + frame_length);
-            rows = rows.concat(new Array(frame_length_empty).fill(0));
+            let fsize_empty = Math.pow(2, Math.round(Math.log(fsize) / Math.log(2))) - fsize;
+            rows = pad_signal.slice(rows, rows + fsize);
+            rows = rows.concat(new Array(fsize_empty).fill(0));
             return rows;
+
         });
+
+
     }
 
     FFT_PowSpec() {
@@ -167,6 +192,7 @@ class MFCC {
         });
         this.mag_frames = this.mag_frames.map(frame => frame.map(value => Math.abs(value)));
         this.pow_frames = this.mag_frames.map(frame => frame.map(value => (1.0 / this.nfft) * Math.pow(value, 2)));
+
     }
 
     filterBanks() {
@@ -203,16 +229,19 @@ class MFCC {
 
     MFCCs() {
         this.mfccs = new Array(0);
-        this.filter_banks.forEach(filter_bank => this.mfccs.push(dct(filter_bank).slice(0, this.num_ceps)))
+        this.filter_banks.forEach(filter_bank => {
+            let val = dct(filter_bank, 2).slice(0, this.num_ceps);
+            this.mfccs.push(val)
+        })
 
         let ncoeff = S(this.mfccs)[1]
 
         let n = numpy.arange(ncoeff).tolist()
-        let lift = n.map(n_ => 1 + (this.cep_lifter / 2) * Math.sin(Math.PI * n_ / this.cep_lifter));
+        // let lift = n.map(n_ => 1 + (this.cep_lifter / 2) * Math.sin(Math.PI * n_ / this.cep_lifter));
 
         this.mfccs = this.mfccs.map(mfcc => {
             mfcc = mfcc.map((value, index) => {
-                value *= lift[index];
+                // value *= lift[index];
                 return value;
             });
             return mfcc;
@@ -222,6 +251,18 @@ class MFCC {
     meanNormalization() {
         this.mfccs = this.mfccs.map(mfcc => mfcc = mfcc.map(value => value -= (numpy.mean(mfcc) + 1e-8)));
         this.filter_banks = this.filter_banks.map(filter_bank => filter_bank.map(filter => (numpy.mean(filter) + 1e-8)));
+
+        let min = 0;
+        let max = 0;
+
+        this.mfccs.forEach(mfcc => {
+            let mfcc_flat = numpy.flatten(mfcc).tolist();
+            mfcc_flat.push(min, max)
+            max = Math.max(...mfcc_flat);
+            min = Math.min(...mfcc_flat);
+        });
+
+        this.mfccs = util.compress(this.mfccs, min, max);
     }
 
 

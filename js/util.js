@@ -41,14 +41,6 @@ module.exports = {
       obj1,
       obj2
     ];
-  }, // set with the same ratios from 0 to 1
-  compress: function (A, min, max) {
-    try {
-      A = A.map(ar => ar.map(n => [this.map(n, min, max, 0, 1)]));
-    } catch (error) {
-      A = A.map(ar => [this.map(ar, min, max, 0, 1)]);
-    }
-    return A;
   },
   printOnce: function (msg, id) {
 

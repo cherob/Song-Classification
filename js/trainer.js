@@ -1,6 +1,8 @@
 const tf = require("@tensorflow/tfjs-node-gpu");
 // require('@tensorflow/tfjs-node');
-const Config = require('./cfg').Config;
+const Config = require('./cfg.v2').Config;
+const stats = require('./analytics');
+const fs = require(`fs`);
 const cliProgress = require('cli-progress');
 const util = require('./util.js');
 
@@ -12,16 +14,21 @@ class Trainer {
     this.model = tf.sequential();
     this.config = config;
     this.checkpoint = undefined;
+
+    this.improvement = false;
+    this.last_score = 0;
+
   }
 
   generateModelReccurent(shape) {
+    console.log(` -> Mode: Recurrent [${this.config.modes[this.config.mode]}]`) +
 
-    // Build and compile this model
-    this.model.add(tf.layers.lstm({
-      units: 128,
-      returnSequences: true,
-      inputShape: shape
-    }));
+      // Build and compile this model
+      this.model.add(tf.layers.lstm({
+        units: 128,
+        returnSequences: true,
+        inputShape: shape
+      }));
     this.model.add(tf.layers.lstm({
       units: 128,
       returnSequences: true
@@ -66,7 +73,41 @@ class Trainer {
     this.compile();
   }
 
+  generateModelNewVersion(shape) {
+    console.log(` -> Mode: New [${this.config.modes[this.config.mode]}]`)
+    this.model.add(tf.layers.flatten({
+      inputShape: shape
+    }))
+
+    this.model.add(tf.layers.dense({
+      units: 512,
+      activation: "relu"
+    }));
+
+    this.model.add(tf.layers.dense({
+      units: 256,
+      activation: "relu"
+    }));
+
+    this.model.add(tf.layers.dense({
+      units: 64,
+      activation: "relu"
+    }));
+
+    this.model.add(
+      tf.layers.dense({
+        units: this.config.categories,
+        activation: "softmax"
+      })
+    );
+
+    this.model.summary();
+    this.compile();
+  }
+
   generateModelConv(shape) {
+    console.log(` -> Mode: Conv [${this.config.modes[this.config.mode]}]`)
+
     // Build and compile  this.model.
     this.model.add(tf.layers.conv2d({
       filters: 16,
@@ -146,136 +187,146 @@ class Trainer {
   }
 
   compile() {
+    let optimizer = tf.train.adam(this.config.learning_rate);
+
     this.model.compile({
       loss: tf.metrics.categoricalCrossentropy,
-      optimizer: tf.train.adam(this.config.learning_rate),
-      metrics: ["acc"]
+      optimizer: optimizer,
+      metrics: ["accuracy"]
     });
   }
 
   async summary(X, y) {
-    X = tf.tensor(X);
-    let acc_list = [];
-    let predictions = await this.model.predict(X).array();
-    predictions.forEach((prediction, i) => {
-      util.fromCategorical(y)[i].forEach((cat, ii) => {
-        if (cat == 1)
-          acc_list.push(prediction[util.fromCategorical(y)[i][ii]]);
-      });
-    });
-    let acc = ((util.average(acc_list)) * 100).toFixed(2);
-    let loss = (100 - util.standardDeviation(acc_list) * 100).toFixed(2);
-    console.log(` -> [Validation] Acc: ${acc}% | Loss: ${loss}% `);
-  }
 
-  async load() {
+    let accuracies = [];
+
+    this.improvement = false;
+
     try {
-      this.model = await tf.loadLayersModel(this.config.model_path + '/model.json');
-      this.compile();
-      return true;
+      let res = this.model.predict(tf.tensor(X));
+      let predictions = res.arraySync();
+
+      predictions.forEach((prediction, i) => {
+        util.fromCategorical(y)[i].forEach((cat, ii) => {
+          if (cat == 1)
+            accuracies.push(prediction[util.fromCategorical(y)[i][ii]]);
+        });
+      });
+
     } catch (error) {
-      return false;
+      console.error(error);
     }
+
+    let acc = parseFloat(((util.average(accuracies)) * 100).toFixed(2));
+    let loss = (100 - util.standardDeviation(accuracies) * 100).toFixed(2);
+
+    if (acc > this.last_score) {
+      this.last_score = acc;
+      this.improvement = true;
+    }
+
+    console.log(` -> [Validation] Loss: ${loss}% | Acc: ${acc}% ${this.improvement ? ' => better!' : ''}`);
   }
 
   async start(dataset) {
-    if (this.config.use_checkpoints_model)
-      await this.load();
+    let result_params = {
+      total_batch_size: 0,
+      epoch: 0,
+      logs: [],
+      history: function () {
+        let acc = this.logs.map((log) => log.acc);
+        let loss = this.logs.map((log) => log.loss);
 
-    this.config.acc_temp = [];
-    this.config.val_acc_temp = [];
-    this.config.loss_temp = [];
-    this.config.val_loss_temp = [];
+        return {
+          epoch: this.epoch,
+          acc: parseFloat(((util.average(acc.slice(Math.max(acc.length - (10), 0)))) * 100).toFixed(2)) || 0,
+          loss: parseFloat(((util.average(loss.slice(Math.max(loss.length - (10), 0)))) * 100).toFixed(2)) || 0
+        }
+      },
+      progress: function (size) {
+        this.total_batch_size += size;
+        return this.total_batch_size;
+      }
+    };
 
     if (!this.config.calls) this.config.calls = Number.MAX_VALUE;
 
     // Print config settings
     util.calculate(this.config);
 
+    console.log('=== Save Images ===')
+    stats.saveImages(this.config, dataset.data.train.X);
+
+
     for (let i = 1; i < this.config.calls + 1; i++) {
-      let X, y, vel_X, vel_y;
-      let shuffled_model = [null, null];
-      let history = {
-        loss: [],
-        acc: [],
-        epoch: [0, this.config.epochs],
-      }
+      try {
+        if (this.config.use_checkpoints_model) {
+          this.model = await tf.loadLayersModel(this.config.model_path + '/model.json');
+          let params = fs.readFileSync(this.config.history_path);
+          params = JSON.parse(params);
+          result_params.epoch = params.epoch;
+          result_params.logs = params.logs;
+        }
+      } catch (error) {}
 
-      // Test Model
-      vel_X = dataset.data.test.X;
-      vel_y = util.toCategorical(dataset.data.test.y, this.config.categories);
-      await this.summary(vel_X, vel_y);
+      this.compile();
 
-      // Convert model
+      result_params.logs = [];
+      let X, y, X_val, y_val;
+
+      // Train model
       X = dataset.data.train.X
       y = util.toCategorical(dataset.data.train.y, this.config.categories)
 
-      // Shuffle model
-      if (this.config.shuffle) {
-        console.log(" -> Shuffle model");
-        shuffled_model = util.shuffle(X, y);
-      }
+      // Validation Model
+      X_val = dataset.data.test.X;
+      y_val = util.toCategorical(dataset.data.test.y, this.config.categories);
 
-      // Convert to tensor
-      X = tf.tensor(shuffled_model[0] || X);
-      y = tf.tensor(shuffled_model[1] || y);
+      // Shuffle model
+      // let shuffled_model = [null, null];
+      // if (this.config.shuffle) {
+      //   // console.log(" -> Shuffle model");
+      //   shuffled_model = util.shuffle(X, y);
+      //   X = shuffled_model[0];
+      //   y = shuffled_model[1];
+      // }
 
       // Loading Bar
-      let progress = [0, 0];
-      let bar_options = [{
-        format: 'Epoch {epoch} [{bar}] {percentage}% | ETA: {eta}s | {value}/{total} | Acc: {acc}% | Loss: {loss}% '
+      let status_epoch_bar_options = [{
+        format: `Epoch {epoch} [{bar}] | Acc: {acc}% | Loss: {loss}%`
       }, cliProgress.Presets.shades_classic];
-      var bar2 = new cliProgress.SingleBar(...bar_options);
+      let epoch_bar = new cliProgress.SingleBar(...status_epoch_bar_options);
 
-
-      // Start fitting
-      let fit_options = {
+      await this.model.fit(tf.tensor(X), tf.tensor(y), {
         verbose: 0,
         epochs: this.config.epochs,
-        shuffle: this.config.shuffle_fit,
-        batch_size: this.config.batch_size,
+        shuffle: true,
+        batchSize: this.config.batch_size,
         callbacks: {
-          onYield: function (epochs, batch, logs) {
-            util.printOnce(`=== Call ${i} === `);
-
-            // Set current Epoch
-            history.epoch[0] = epochs + 1;
-
-            if (bar2.value == 0)
-              bar2.start(dataset.data.train.X.length, 0, {
-                acc: (util.average(history.acc.slice(-progress[1])) * 100).toFixed(2),
-                loss: (100 - util.standardDeviation(history.acc.slice(-progress[1])) * 100).toFixed(2),
-                epoch: `${history.epoch[0]}/${history.epoch[1]}`,
-                dot: new Array(batch % 1 + batch % 2 + batch % 3).fill('.').join('')
-              });
-
+          onEpochBegin(epoch, logs) {
+            result_params.epoch++;
+            epoch_bar.start(X.length, 0, result_params.history());
           },
-          onBatchEnd: function (batch, logs) {
-            progress[0] += logs.size;
-            progress[1]++;
-
-            history.acc.push(logs.acc)
-            history.loss.push(logs.loss)
-
-            bar2.update(progress[0], {
-              acc: (util.average(history.acc.slice(-progress[1])) * 100).toFixed(2),
-              loss: (100 - util.standardDeviation(history.acc.slice(-progress[1])) * 100).toFixed(2),
-              epoch: `${history.epoch[0]}/${history.epoch[1]}`,
-              dot: new Array(batch % 1 + batch % 2 + batch % 3).fill('.').join('')
-            });
+          onEpochEnd(epoch, logs) {
+            epoch_bar.stop();
+            result_params.total_batch_size = 0;
           },
-          onEpochEnd: () => {
-            bar2.stop();
-            bar2 = new cliProgress.SingleBar(...bar_options);
-            progress[0] = 0;
+          onBatchEnd(batch, logs) {
+            result_params.logs.push(logs);
+            epoch_bar.update(result_params.progress(logs.size), result_params.history())
           }
         }
+      });
+
+      await this.summary(X_val, y_val);
+      try {
+        if (this.improvement) {
+          fs.writeFileSync(this.config.history_path, JSON.stringify(result_params));
+          await this.model.save(this.config.model_path);
+        }
+      } catch (error) {
+        console.log(error);
       }
-
-      this.checkpoint = await this.model.fit(X, y, fit_options);
-
-
-      await this.model.save(this.config.model_path);
     }
   }
 }
