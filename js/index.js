@@ -1,28 +1,11 @@
-const trn = require('./trainer');
-const cfg = require('./cfg.v2');
-const dt = require('./dataset');
-const util = require('./util.js');
+const dt = require('./core/Dataset');
+const trn = require('./core/Trainer');
+const cfg = require('./core/Config');
 
-console.log('=== Load Config File ===');
-let config = new cfg.Config();
-util.calculate(config);
+let config = new cfg.Config('./js/config.json').load();
 
-console.log('=== Build/Load samples (press any key) ===');
 let dataset = new dt.Dataset(config);
-if (config.use_checkpoints) dataset.load()
-dataset.build()
+dataset.load();
 
-
-if (config.files_len >= 100) {
-    console.log('=== Loading Model ===');
-    let trainer = new trn.Trainer(config);
-    if (config.mode == 0)
-        trainer.generateModelConv(dataset.shape);
-    else if (config.mode == 1)
-        trainer.generateModelReccurent(dataset.shape);
-    else if (config.mode == 2)
-        trainer.generateModelNewVersion(dataset.shape);
-
-    console.log('=== Train model ===');
-    trainer.start(dataset);
-}
+let trainer = new trn.Trainer(dataset);
+trainer.start();

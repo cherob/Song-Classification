@@ -1,0 +1,35 @@
+{
+    "version": 3.15,
+    "check": true,
+    "path": {
+        "history": "data/%v/history.json",
+        "database": "data/%v/database.json",
+        "config": "data/%v/config.json",
+        "img": "data/%v/images/",
+        "model": "data/%v/"
+    },
+    "data": {
+        "audio_cut": 0,
+        "nfft": 2048,
+        "nmag": 26,
+        "lowfreq": 10,
+        "highfreq": 8000,
+
+        "fsize": 50,
+        "fstep": 25,
+
+        "samples_per_file": 6,
+        "sample_rate": 20480,
+        "sample_lenght": 2
+    },
+    "train": {
+        "mode": 1,
+        "included": false,
+        "sample_rate": 20480,
+        "learning_rate": 0.001,
+        "batch_size": 64,
+        "validation_split": 0.1,
+        "calls": 20,
+        "epochs": 1
+    }
+}
